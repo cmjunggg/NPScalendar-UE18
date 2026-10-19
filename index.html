@@ -122,7 +122,6 @@
       <button class="btn" id="saveImg">QR 이미지 저장</button>
     </div>
     <div class="row">
-      <button class="btn ghost" id="edit" title="수정해서 다시 제출하면 새 접수번호가 발급돼요">← 수정하기</button>
       <button class="btn ghost" id="restart">새로 만들기</button>
     </div>
   </section>
@@ -2543,11 +2542,6 @@ var qrcode = function() {
     } catch (err) {
       $('submitErr').textContent = '접수하지 못했어요. 인터넷 연결을 확인하고 다시 눌러 주세요.';
     } finally { btn.disabled = false; btn.textContent = '제출하기'; }
-  };
-  // 수정하기: 입력값을 살린 채 처음 화면으로 (다시 제출하면 새 QR이 만들어짐)
-  $('edit').onclick = () => {
-    if (current) { $('date').value = current.date; $('kw').value = current.kw; $('mean').value = current.mean; }
-    kwTidy(); $('mean').dispatchEvent(new Event('input')); go(1);
   };
   $('restart').onclick = () => {
     $('date').value = ''; $('kw').value = ''; $('mean').value = '';
