@@ -36,6 +36,7 @@
   input:focus, textarea:focus { border-color: var(--focus); box-shadow: 0 0 0 3px var(--focus-ring); }
   input.kw { text-transform: uppercase; letter-spacing: .12em; font-weight: 600; }
   textarea { min-height: 120px; resize: vertical; line-height: 1.6; }
+  .meta span:last-child { white-space: nowrap; }
   .meta { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--faint); margin-top: 6px; }
   .err { color: var(--danger); font-size: 13px; margin-top: 6px; display: none; }
   .bad input, .bad textarea { border-color: var(--danger); }
@@ -87,7 +88,7 @@
 
     <div class="q" id="qKw">
       <label for="kw">키워드<span class="req">*</span></label>
-      <p class="help">달력 아래에 작게 새겨져요. 한글, 영문, 숫자로 10자까지 쓸 수 있어요.</p>
+      <p class="help">달력 아래에 작게 새겨져요. 한글·영문·숫자와 기호 <span style="white-space:nowrap">! ? . , _ - ' &amp; # + ( ) ~ @ : /</span> 로 10자까지 쓸 수 있어요.</p>
       <input type="text" class="kw" id="kw" maxlength="10" placeholder="예: BIRTHDAY, 생일" autocomplete="off" autocapitalize="characters" spellcheck="false">
       <div class="meta"><span>영문은 대문자로 그려져요</span><span id="kwCount">0 / 10</span></div>
       <div class="err" id="kwErr">키워드를 입력해 주세요.</div>
@@ -2429,7 +2430,12 @@ var qrcode = function() {
 </script>
 <script>
 (() => {
-  const KW_OK = /^[가-힣ㄱ-ㅎㅏ-ㅣA-Z0-9 ]*$/;   // 한글·영문(대문자로)·숫자·띄어쓰기
+  const KW_OK = /^[가-힣ㄱ-ㅎㅏ-ㅣA-Z0-9 !?.,_\-'&#+()~@:\/]*$/;   // 한글·영문(대문자로)·숫자·띄어쓰기·일부 기호
+  const KW_SYMBOLS = "! ? . , _ - ' & # + ( ) ~ @ : /";
+  const KW_BAD = /[^가-힣ㄱ-ㅎㅏ-ㅣA-Z0-9 !?.,_\-'&#+()~@:\/]/gu;
+  // 휴대폰 자판의 둥근 따옴표·물결 등은 같은 모양의 기본 기호로 바꿔 줌
+  const fixKw = v => v.replace(/[‘’`´]/g, "'").replace(/[～〜]/g, '~').replace(/[！]/g, '!').replace(/[？]/g, '?');
+  function badChars(v) { return [...new Set(fixKw(v).toUpperCase().match(KW_BAD) || [])].join(' '); }
   const MEAN_MAX = 500, KW_MAX = 10;
   // Apps Script 웹앱 주소 — 제출하면 여기서 접수번호와 QR 내용을 받아옴
   const SUBMIT_URL = 'https://script.google.com/macros/s/AKfycbyTjRWyuFjOGa4prqt1DpeZRkQtW6QabgxCeL5cvkLxVwZqF-28fYZe5AT3KZH6a-aKsQ/exec';
@@ -2458,7 +2464,7 @@ var qrcode = function() {
   const today = new Date();
   function readForm() {
     const date = $('date').value;
-    const kw = $('kw').value.normalize('NFC').toUpperCase().replace(/\s+/g, ' ').trim();
+    const kw = fixKw($('kw').value.normalize('NFC')).toUpperCase().replace(/\s+/g, ' ').trim();
     const mean = $('mean').value.normalize('NFC').trim();
     return { date, kw, mean };
   }
@@ -2468,17 +2474,21 @@ var qrcode = function() {
     const dOk = /^\d{4}-\d{2}-\d{2}$/.test(date) && !isNaN(new Date(date)) && +date.slice(0, 4) >= 1900 && +date.slice(0, 4) <= 2100;
     const kOk = kw.length > 0 && kw.length <= KW_MAX && KW_OK.test(kw);
     const mOk = Array.from(mean).length <= MEAN_MAX;
-    $('kwErr').textContent = !kw.length ? '키워드를 입력해 주세요.' : '한글, 영문, 숫자만 쓸 수 있어요.';
+    const bad = badChars(kw);
+    $('kwErr').textContent = !kw.length ? '키워드를 입력해 주세요.' : bad ? `쓸 수 없는 문자가 있어요: ${bad}` : '키워드를 확인해 주세요.';
     if (show) { $('qDate').classList.toggle('bad', !dOk); $('qKw').classList.toggle('bad', !kOk); $('qMean').classList.toggle('bad', !mOk); }
     ok = dOk && kOk && mOk;
     if (show && !ok) (document.querySelector('.bad input, .bad textarea') || {}).focus?.();
     return ok;
   }
   function kwTidy() {
-    const el = $('kw'), v = el.value.toUpperCase();
+    const el = $('kw'), v = fixKw(el.value).toUpperCase();
     if (v !== el.value) { const pos = el.selectionStart; el.value = v; el.setSelectionRange(pos, pos); }
     $('kwCount').textContent = `${Array.from(el.value).length} / ${KW_MAX}`;
-    if ($('qKw').classList.contains('bad')) validate(true);
+    // 쓸 수 없는 문자는 입력하는 즉시 알려 줌
+    const bad = badChars(el.value);
+    if (bad) { $('kwErr').textContent = `쓸 수 없는 문자가 있어요: ${bad}`; $('qKw').classList.add('bad'); }
+    else if ($('qKw').classList.contains('bad')) { if (el.value.trim()) $('qKw').classList.remove('bad'); else validate(true); }
   }
   // 한글 조합 중에는 값을 건드리지 않아야 글자가 깨지지 않음
   $('kw').addEventListener('input', e => { if (!e.isComposing) kwTidy(); else $('kwCount').textContent = `${Array.from($('kw').value).length} / ${KW_MAX}`; });
