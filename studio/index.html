@@ -1,0 +1,966 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>달력 플로터 스튜디오</title>
+<style>
+  /* ===== Craft Precision 디자인 토큰 (Stitch 시안 기준) ===== */
+  :root {
+    --surface: #fbf9f4; --bench: #e4e2dd; --panel: #ffffff;
+    --card: #f5f4ee; --card-hover: #efeee9; --chip: #efeee9; --chip-strong: #e9e8e3;
+    --line: #c1c8c2; --line-soft: rgba(193,200,194,.45); --divider: #e2dfd7;
+    --ink: #1b1c19; --ink-2: #414844; --muted: #717973;
+    --primary: #1e4634; --primary-hover: #042f1f; --primary-tint: #c0edd3; --primary-on: #89b39c;
+    --blue: #1960a3; --orange: #c9601f; --orange-strong: #6b2b00; --red: #ba1a1a; --red-bg: #ffdad6;
+    --sans: "Noto Sans KR", "Apple SD Gothic Neo", "Pretendard", "Noto Sans", -apple-system, sans-serif;
+    --mono: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    --inset: inset 0 1px 2px rgba(28,29,26,.06);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { background: var(--surface); color: var(--ink); font: 14px/1.45 var(--sans); -webkit-font-smoothing: antialiased; }
+  button { font: inherit; }
+  .app { display: grid; grid-template-columns: 380px 1fr; height: 100vh; }
+
+  /* ===== 사이드바 ===== */
+  aside { background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0;
+          box-shadow: 0 4px 24px rgba(27,28,25,.06); position: relative; z-index: 2; }
+  .side-scroll { flex: 1; overflow-y: auto; padding: 20px 20px 16px; display: flex; flex-direction: column; gap: 12px; }
+  .brand { display: flex; align-items: center; gap: 8px; }
+  .brand-icon { width: 28px; height: 28px; border-radius: 4px; background: var(--primary); display: grid; place-items: center; flex: none; }
+  .brand-icon svg { width: 16px; height: 16px; }
+  .brand h1 { font-size: 16px; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
+  .ver { font: 500 10px/14px var(--mono); letter-spacing: .04em; padding: 1px 5px; border-radius: 3px; background: var(--chip); color: var(--ink-2); }
+  .device { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 4px; background: var(--card); font: 500 11px/14px var(--mono); color: var(--ink-2); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: none; }
+  .dot.ok { background: var(--primary); } .dot.busy { background: var(--orange); animation: pulse 1.2s infinite; }
+  .dot.err { background: var(--red); }
+  @keyframes pulse { 50% { opacity: .35; } }
+  .head2 { display: flex; align-items: flex-end; justify-content: space-between; padding-top: 10px; border-top: 1px solid var(--line-soft); }
+  .eyebrow { font: 500 10px/14px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); display: block; }
+  .head2 h2 { margin: 2px 0 0; font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
+  .tag { font: 600 10px/14px var(--mono); letter-spacing: .04em; color: var(--primary); background: var(--primary-tint); padding: 2px 6px; border-radius: 3px; }
+
+  /* 카드 섹션 */
+  .card { background: var(--card); border: 1px solid var(--line-soft); border-radius: 8px; padding: 12px; }
+  .card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+  .card-title { font-size: 14px; font-weight: 700; letter-spacing: -0.01em; color: var(--ink); }
+  .hint { font: 500 10px/14px var(--mono); letter-spacing: .04em; color: var(--muted); }
+
+  details.card { padding: 0; }
+  details.card > summary { list-style: none; cursor: pointer; padding: 12px; border-radius: 8px; }
+  details.card > summary::-webkit-details-marker { display: none; }
+  details.card > summary:hover { background: var(--card-hover); }
+  details.card > summary .card-head { margin-bottom: 4px; }
+  .chev { width: 18px; height: 18px; color: var(--muted); transition: transform .15s; flex: none; }
+  details[open] > summary .chev { transform: rotate(180deg); }
+  .sum { display: flex; justify-content: space-between; gap: 8px; font: 500 11px/16px var(--mono); color: var(--muted); }
+  details[open] > summary .sum { display: none; }
+  details[open] > summary { padding-bottom: 4px; }
+  .fold-body { padding: 4px 12px 12px; }
+
+  /* 입력 */
+  .field { display: flex; align-items: center; background: #fff; border: 1px solid var(--line-soft); border-radius: 4px; box-shadow: var(--inset); padding: 0 8px; height: 40px; }
+  .field:focus-within { border-color: var(--blue); }
+  .field input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font: 500 16px/1 var(--mono); color: var(--ink); text-align: center; padding: 0; }
+  .field .unit { font-size: 12px; color: var(--muted); margin-left: 2px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  input[type=number] { -moz-appearance: textfield; }
+  input.kw { width: 100%; height: 44px; border: 1px solid var(--line-soft); border-radius: 4px; background: #fff; box-shadow: var(--inset);
+             padding: 0 12px; font: 600 16px/1 var(--mono); letter-spacing: .18em; color: var(--ink); outline: 0; }
+  input.kw:focus { border-color: var(--blue); }
+  .mini-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .mini { display: flex; flex-direction: column; gap: 3px; font: 500 10px/14px var(--mono); letter-spacing: .04em; color: var(--muted); }
+  .mini input, select { width: 100%; height: 32px; border: 1px solid var(--line-soft); border-radius: 4px; background: #fff; box-shadow: var(--inset);
+                        font: 500 12px/1 var(--mono); color: var(--ink); padding: 0 6px; outline: 0; }
+  .mini input { text-align: center; }
+  .mini input:focus, select:focus { border-color: var(--blue); }
+  select { font-family: var(--sans); font-size: 13px; }
+  .sub-label { font: 500 10px/14px var(--mono); letter-spacing: .04em; color: var(--muted); margin: 0 0 4px; display: block; }
+  .note { font-size: 11px; color: var(--muted); margin-top: 6px; }
+  .slider { display: grid; grid-template-columns: 70px 1fr 40px; gap: 8px; align-items: center; font-size: 12px; color: var(--ink-2); margin: 4px 0; }
+  .slider output { text-align: right; font: 500 12px/1 var(--mono); color: var(--ink); }
+  input[type=range] { width: 100%; accent-color: var(--primary); }
+  .check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink); margin: 7px 0; cursor: pointer; }
+  .check input { width: 15px; height: 15px; accent-color: var(--primary); margin: 0; }
+  .linkbtn { background: none; border: 0; padding: 0; margin-top: 6px; font: 500 11px/14px var(--mono); color: var(--muted); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+  .linkbtn:hover { color: var(--ink); }
+  /* 접수 QR */
+  .scan { transition: box-shadow .2s, border-color .2s; }
+  .scan.flash { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-tint); }
+  .scan.bad { border-color: var(--red); box-shadow: 0 0 0 3px var(--red-bg); }
+  .scan-empty { font-size: 12px; color: var(--muted); line-height: 1.5; }
+  .scan-cur { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: #fff; border: 1px solid var(--line-soft); border-radius: 6px; padding: 8px 10px; }
+  .scan-no { font: 700 18px/1.1 var(--mono); letter-spacing: .02em; color: var(--ink); }
+  .scan-sub { font: 500 11px/15px var(--mono); color: var(--muted); margin-top: 2px; }
+  .scan-sub b { color: var(--primary); font-weight: 600; }
+  .scan-warn { margin-top: 6px; padding: 6px 8px; border-radius: 4px; background: var(--red-bg); color: var(--red); font-size: 12px; font-weight: 600; }
+  .scan-btn { flex: none; height: 28px; padding: 0 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--card); font: 500 11px/1 var(--sans); color: var(--ink-2); cursor: pointer; }
+  .scan-btn:hover { background: var(--chip-strong); }
+  .scan-q { margin-top: 8px; }
+  .scan-q-head { font: 500 10px/14px var(--mono); letter-spacing: .06em; color: var(--muted); margin-bottom: 4px; }
+  .scan-row { display: grid; grid-template-columns: 1fr auto auto; gap: 6px; align-items: center; padding: 5px 0; border-top: 1px solid var(--divider); font: 500 12px/1.3 var(--mono); }
+  .scan-row .meta { color: var(--muted); font-size: 11px; }
+  .scan-row .x { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 14px; padding: 0 4px; }
+
+  /* 하단 실행 영역 */
+  .actions { padding: 16px 20px; border-top: 1px solid var(--line-soft); background: var(--panel); box-shadow: 0 -4px 16px rgba(27,28,25,.04); display: flex; flex-direction: column; gap: 8px; }
+  .btn-plot { width: 100%; height: 56px; border: 1px solid #163627; border-radius: 8px; background: var(--primary); color: #fff; font-size: 18px; font-weight: 700;
+              display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; transition: background .15s, transform .05s; }
+  .btn-plot svg { width: 20px; height: 20px; }
+  .btn-plot:hover { background: var(--primary-hover); }
+  .btn-plot:active { transform: scale(.99); }
+  .btn-plot.confirm { background: var(--orange); border-color: var(--orange); font-size: 15px; }
+  .btn-plot:disabled { background: #8c9a92; border-color: #8c9a92; cursor: default; }
+  .row-actions { display: flex; gap: 6px; position: relative; }
+  .btn-sec { flex: 1; height: 36px; border: 0; border-radius: 4px; background: var(--chip); color: var(--ink); font: 500 12px/1 var(--mono); cursor: pointer; }
+  .btn-sec:hover { background: var(--chip-strong); }
+  .btn-icon { width: 40px; flex: none; display: grid; place-items: center; }
+  .btn-icon svg { width: 18px; height: 18px; }
+  .btn-stop { height: 40px; border: 0; border-radius: 4px; background: var(--red); color: #fff; font: 600 12px/1 var(--mono); letter-spacing: .06em; cursor: pointer; display: none; }
+  .menu { position: absolute; right: 0; bottom: 42px; background: #fff; border: 1px solid #d5d1c5; border-radius: 6px; box-shadow: 0 4px 16px rgba(28,29,26,.08); padding: 4px; display: none; min-width: 180px; z-index: 5; }
+  .menu.show { display: block; }
+  .menu button { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 8px 10px; font-size: 13px; border-radius: 4px; cursor: pointer; color: var(--ink); }
+  .menu button:hover { background: var(--card); }
+  .state-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; padding-top: 2px; }
+  .state { display: flex; align-items: flex-start; gap: 6px; font: 500 11px/16px var(--mono); color: var(--ink-2); white-space: pre-wrap; word-break: break-all; }
+  .state .dot { margin-top: 4px; }
+  .state.run { color: var(--orange-strong); } .state.ok { color: var(--primary); } .state.err { color: var(--red); }
+  .state-code { font: 500 10px/16px var(--mono); letter-spacing: .04em; color: var(--muted); flex: none; }
+  .msg { font: 500 11px/15px var(--mono); color: var(--muted); word-break: break-all; }
+  .msg:empty { display: none; }
+  .msg.warn { color: var(--red); }
+
+  /* ===== 작업대(미리보기) ===== */
+  main { background: var(--bench); display: flex; flex-direction: column; min-width: 0; position: relative; overflow: hidden; }
+  .hud { height: 48px; flex: none; background: rgba(251,249,244,.85); backdrop-filter: blur(8px); padding: 0 20px; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+         box-shadow: 0 1px 4px rgba(28,29,26,.03); z-index: 1; font: 500 11px/14px var(--mono); color: var(--muted); }
+  .hud-left, .hud-right { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .hud b { color: var(--ink); font-weight: 600; }
+  .legend { display: flex; align-items: center; gap: 12px; padding: 4px 8px; background: var(--chip); border-radius: 4px; }
+  .legend .k { color: var(--ink); }
+  .lg { display: inline-flex; align-items: center; gap: 5px; }
+  .lg i { width: 14px; border-top: 1.5px dashed currentColor; display: inline-block; }
+  .lg.blue { color: var(--blue); } .lg.orange { color: var(--orange-strong); }
+  .pill { padding: 2px 6px; border-radius: 3px; background: var(--chip-strong); color: var(--ink); }
+  .stage { flex: 1; position: relative; display: flex; align-items: center; justify-content: center; padding: 32px; min-height: 0; }
+  .stage::before { content: ''; position: absolute; inset: 0; opacity: .2; pointer-events: none;
+                   background-image: radial-gradient(#717973 1px, transparent 1px); background-size: 20px 20px; }
+  .paper { position: relative; background: #fff; border-radius: 2px; box-shadow: 0 2px 8px rgba(28,29,26,.06), 0 16px 36px rgba(28,29,26,.05); }
+  .paper svg { display: block; width: 100%; height: 100%; }
+  .crop { position: absolute; width: 16px; height: 16px; border-color: var(--line); border-style: solid; pointer-events: none; }
+  .crop.tl { top: 12px; left: 12px; border-width: 1px 0 0 1px; } .crop.tr { top: 12px; right: 12px; border-width: 1px 1px 0 0; }
+  .crop.bl { bottom: 12px; left: 12px; border-width: 0 0 1px 1px; } .crop.br { bottom: 12px; right: 12px; border-width: 0 1px 1px 0; }
+  .wm { position: absolute; top: 18px; font: 500 10px/14px var(--mono); letter-spacing: .06em; color: var(--line); pointer-events: none; }
+  .wm.l { left: 34px; } .wm.r { right: 34px; }
+  .thumb { position: absolute; right: 24px; bottom: 16px; width: 176px; background: #fff; border-radius: 8px; padding: 8px; box-shadow: 0 8px 20px rgba(28,29,26,.08); z-index: 2; }
+  .thumb-head, .thumb-foot { display: flex; justify-content: space-between; font: 500 10px/14px var(--mono); color: var(--muted); padding: 0 2px; }
+  .thumb-head b { color: var(--ink); font-weight: 600; }
+  .thumb-box { margin: 6px 0; background: var(--card); border-radius: 4px; padding: 6px; box-shadow: var(--inset); }
+  .thumb-box svg { display: block; width: 100%; height: auto; background: #fff; }
+  .statusbar { height: 40px; flex: none; background: var(--card); padding: 0 20px; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+               font: 500 11px/14px var(--mono); color: var(--ink-2); box-shadow: 0 -1px 4px rgba(28,29,26,.03); z-index: 1; }
+  .statusbar .sep { color: var(--line); }
+  .sb-left, .sb-right { display: flex; align-items: center; gap: 10px; min-width: 0; white-space: nowrap; overflow: hidden; }
+  .sb-left svg { width: 15px; height: 15px; color: var(--muted); flex: none; }
+  #dims { color: var(--ink); }
+  .warn { color: var(--red); font-weight: 600; }
+  .ready { display: inline-flex; align-items: center; gap: 6px; color: var(--primary); font-weight: 600; }
+  @media (max-width: 900px) { .legend .k, .hud-right .pill:last-child { display: none; } }
+  @media (max-width: 760px) { .app { grid-template-columns: 1fr; height: auto; } .stage { height: 70vh; } .thumb { display: none; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <div class="side-scroll">
+      <div class="brand">
+        <div class="brand-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#89b39c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l4-1 10-10-3-3L5 16l-1 4z"/><path d="M13.5 7.5l3 3"/></svg></div>
+        <h1>달력 플로터 스튜디오</h1><span class="ver">v2.0</span>
+      </div>
+      <div class="device"><span class="dot" id="devDot"></span><span id="devText">플로터 연결 확인 중…</span></div>
+
+      <div class="head2">
+        <div><span class="eyebrow">Configuration</span><h2>작업 설정</h2></div>
+        <span class="tag">A4 · iDraw</span>
+      </div>
+
+      <!-- 접수 QR (USB 스캐너) -->
+      <section class="card scan" id="scanCard">
+        <div class="card-head"><span class="card-title">접수 QR</span><span class="hint" id="scanHint">스캐너 대기 중</span></div>
+        <div id="scanCur"></div>
+        <div class="scan-q" id="scanQ" hidden></div>
+      </section>
+
+      <!-- 1. 날짜 -->
+      <section class="card">
+        <div class="card-head"><span class="card-title">1. 날짜</span><span class="hint">YYYY · MM · DD</span></div>
+        <div class="grid3">
+          <label class="field"><input id="y" type="number" min="1900" max="2100" aria-label="년"><span class="unit">년</span></label>
+          <label class="field"><input id="m" type="number" min="1" max="12" aria-label="월"><span class="unit">월</span></label>
+          <label class="field day"><input id="d" type="number" min="1" max="31" aria-label="일"><span class="unit">일</span></label>
+        </div>
+      </section>
+
+      <!-- 2. 키워드 -->
+      <section class="card">
+        <div class="card-head"><span class="card-title">2. 키워드</span><span class="hint">달력 하단 · 비우면 생략</span></div>
+        <input class="kw" id="kw" type="text" maxlength="24" value="BIRTH" placeholder="예: BIRTH, WEDDING" autocomplete="off">
+        <label class="check"><input type="checkbox" id="upper"> 영문은 대문자로</label>
+      </section>
+
+      <!-- 3. 달력 위치 -->
+      <details class="card">
+        <summary>
+          <div class="card-head"><span class="card-title">3. 달력 위치 (A4 기준, mm)</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></div>
+          <div class="sum"><span id="sumPos"></span><span id="sumPad"></span></div>
+        </summary>
+        <div class="fold-body">
+          <div class="mini-grid">
+            <label class="mini">X<input type="number" id="bx" value="75" step="0.5"></label>
+            <label class="mini">Y<input type="number" id="by" value="130" step="0.5"></label>
+            <label class="mini">폭<input type="number" id="bw" value="37" step="0.5"></label>
+            <label class="mini">높이<input type="number" id="bh" value="48" step="0.5"></label>
+          </div>
+          <div class="mini-grid" style="margin-top:6px">
+            <label class="mini">안쪽 여백<input type="number" id="pad" value="4" step="0.5" min="0"></label>
+            <span class="note" style="grid-column: span 3; align-self: end; margin: 0 0 8px">사방 동일 · 미리보기에 주황 점선</span>
+          </div>
+        </div>
+      </details>
+
+      <!-- 4. 글꼴 -->
+      <details class="card">
+        <summary>
+          <div class="card-head"><span class="card-title">4. 글꼴</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></div>
+          <div class="sum"><span id="sumFont"></span></div>
+        </summary>
+        <div class="fold-body">
+          <span class="sub-label">달력 (월)</span>
+          <select id="mFont"></select>
+          <span class="sub-label" style="margin-top:10px">달력 (요일 · 날짜)</span>
+          <select id="dFont"></select>
+          <span class="sub-label" style="margin-top:10px">키워드</span>
+          <select id="font"></select>
+          <div class="note" id="fontNote"></div>
+        </div>
+      </details>
+
+      <!-- 5. 크기 조정 -->
+      <details class="card">
+        <summary>
+          <div class="card-head"><span class="card-title">5. 크기 조정 (mm)</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></div>
+          <div class="sum"><span id="sumSize"></span></div>
+        </summary>
+        <div class="fold-body">
+          <div class="slider"><span>월 높이</span><input type="range" id="mSize" min="0.8" max="8" step="0.1" value="4"><output id="mSizeO"></output></div>
+          <div class="slider"><span>구분선 굵기</span><input type="range" id="lineW" min="0.35" max="2" step="0.05" value="0.35"><output id="lineWO"></output></div>
+          <div class="slider"><span>숫자 높이</span><input type="range" id="nSize" min="0.8" max="8" step="0.1" value="1.7"><output id="nSizeO"></output></div>
+          <div class="slider"><span>키워드 높이</span><input type="range" id="kSize" min="0.8" max="8" step="0.1" value="1.7"><output id="kSizeO"></output></div>
+          <div class="slider"><span>동그라미</span><input type="range" id="cSize" min="0.6" max="1.4" step="0.05" value="1"><output id="cSizeO"></output></div>
+        </div>
+      </details>
+
+      <!-- 6. 옵션 -->
+      <section class="card">
+        <div class="card-head" style="margin-bottom:2px"><span class="card-title">6. 옵션</span></div>
+        <label class="check"><input type="checkbox" id="showYear" checked> 월 옆에 연도 표시</label>
+        <label class="check"><input type="checkbox" id="showDow" checked> 요일 줄 표시</label>
+        <label class="check"><input type="checkbox" id="monStart"> 월요일부터 시작</label>
+        <label class="check"><input type="checkbox" id="dblCircle" checked> 동그라미 두 번 긋기 (진하게)</label>
+        <label class="check"><input type="checkbox" id="drawBox"> 달력 박스 테두리도 그리기</label>
+        <label class="check"><input type="checkbox" id="guide" checked> 미리보기 안내선 표시</label>
+        <div style="display:flex;gap:14px;flex-wrap:wrap">
+          <button type="button" class="linkbtn" id="saveDefaults">지금 설정을 기본값으로 저장</button>
+          <button type="button" class="linkbtn" id="resetSettings">기본값으로 되돌리기</button>
+        </div>
+        <div class="note" id="defaultsMsg"></div>
+      </section>
+    </div>
+
+    <!-- 하단 실행 영역 -->
+    <div class="actions">
+      <button class="btn-plot" id="plot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17c3-6 5-6 6-3s3 3 5-2 4-5 7-1"/></svg><span id="plotLabel">플로터로 그리기</span></button>
+      <button class="btn-stop" id="stop">■ 중지 (펜 올리고 멈춤)</button>
+      <div class="row-actions">
+        <button class="btn-sec" id="save">시안만 저장 (.SVG)</button>
+        <button class="btn-sec btn-icon" id="more" aria-label="더보기"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg></button>
+        <div class="menu" id="menu">
+          <button id="openInk">Inkscape에서 열기 (마지막 시안)</button>
+          <button id="reveal">drafts 폴더 보기</button>
+        </div>
+      </div>
+      <div class="msg" id="msg"></div>
+      <div class="state-row">
+        <div class="state" id="plotStatus"><span class="dot" id="stateDot"></span><span id="stateText">대기 중 · 용지 A4 확인</span></div>
+        <span class="state-code" id="stateCode">READY</span>
+      </div>
+      <div id="after" hidden></div>
+    </div>
+  </aside>
+
+  <main>
+    <div class="hud">
+      <div class="hud-left">
+        <span><b>VIEWPORT</b> / ZOOM CROP</span>
+        <span class="legend"><span class="k">안내선 (출력 제외):</span>
+          <span class="lg blue"><i></i><span id="lgBox">외곽 37×48mm</span></span>
+          <span class="lg orange"><i></i><span id="lgPad">안전 여백 5mm</span></span>
+        </span>
+      </div>
+      <div class="hud-right"><span class="pill" id="scaleInfo">1mm = –px</span><span class="pill" style="background:var(--chip);color:var(--muted)">펜 0.35mm</span></div>
+    </div>
+    <div class="stage">
+      <div class="paper" id="paperWrap">
+        <span class="crop tl"></span><span class="crop tr"></span><span class="crop bl"></span><span class="crop br"></span>
+        <span class="wm l">PLOT_LAYER // INK 0.35MM</span><span class="wm r" id="wmCoords">COORDS: X:75.00 Y:130.00</span>
+        <div id="paperBox" style="width:100%;height:100%"></div>
+      </div>
+      <div class="thumb">
+        <div class="thumb-head"><b>A4 전체 시트</b><span>210×297</span></div>
+        <div class="thumb-box"><div id="thumbBox"></div></div>
+        <div class="thumb-foot"><span id="thumbX">X: 75.0mm</span><span id="thumbY">Y: 130.0mm</span></div>
+      </div>
+    </div>
+    <footer class="statusbar">
+      <div class="sb-left"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 3H6a1 1 0 00-1 1v16a1 1 0 001 1h12a1 1 0 001-1V8z"/><path d="M14 3v5h5"/></svg><span id="dims"></span></div>
+      <div class="sb-right"><span id="warn"></span></div>
+    </footer>
+  </main>
+</div>
+
+<script src="lib/opentype.min.js"></script>
+<script>
+(() => {
+  // ---------- 설정 ----------
+  const FONTS = [
+    { id: 'HersheySerifMed',label: '세리프 · 한 줄 (기본)',   file: 'fonts/HersheySerifMed.svg' },
+    { id: 'HersheySans1',   label: '산세리프 · 한 줄',        file: 'fonts/HersheySans1.svg' },
+    { id: 'HersheySansMed', label: '산세리프 굵게 · 한 줄',   file: 'fonts/HersheySansMed.svg' },
+    { id: 'HersheyScript1', label: '필기체 · 한 줄',          file: 'fonts/HersheyScript1.svg' },
+    { id: 'EMSAllure',      label: '손글씨 필기체 · 한 줄',   file: 'fonts/EMSAllure.svg' },
+    { id: 'EMSFelix',       label: '손글씨 · 한 줄',          file: 'fonts/EMSFelix.svg' },
+    { id: 'EMSReadability', label: '깔끔한 손글씨 · 한 줄',   file: 'fonts/EMSReadability.svg' },
+    { id: 'EMSTech',        label: '제도 글씨 · 한 줄',       file: 'fonts/EMSTech.svg' },
+    { id: 'NotoKR',         label: '본고딕 Light · 한글 가능 (테두리 선)', file: 'fonts/NotoSansKR-Light.ttf', otf: true },
+  ];
+  const KO_FONT = 'NotoKR';
+  const MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+  const PAPERS = [
+    { id: 'A4P', label: 'A4 세로', w: 210, h: 297 },
+    { id: 'A4L', label: 'A4 가로', w: 297, h: 210 },
+    { id: 'A5P', label: 'A5 세로', w: 148, h: 210 },
+    { id: 'PC',  label: '엽서 148×100', w: 148, h: 100 },
+  ];
+  const STROKE = 0.35;   // 미리보기·출력 선 굵기(mm)
+  const A4 = { w: 210, h: 297 };   // 플로터 기준 용지 (고정)
+
+  // ---------- 상태 ----------
+  const state = { paper: 'A4P', lastFile: null };
+  const fontCache = {};
+  const $ = id => document.getElementById(id);
+
+  // ---------- 글꼴 불러오기 ----------
+  async function loadFont(id) {
+    if (fontCache[id]) return fontCache[id];
+    const def = FONTS.find(f => f.id === id);
+    let font;
+    if (def.otf) {
+      const buf = await (await fetch(def.file)).arrayBuffer();
+      const ot = opentype.parse(buf);
+      const hb = ot.charToGlyph('H').getBoundingBox();
+      font = { id, otf: true, ot, upm: ot.unitsPerEm, cap: hb.y2 / ot.unitsPerEm,
+               has: ch => ch === ' ' || ot.charToGlyph(ch).index !== 0 };
+    } else {
+      const txt = await (await fetch(def.file)).text();
+      const doc = new DOMParser().parseFromString(txt, 'image/svg+xml');
+      const fe = doc.querySelector('font');
+      const ff = doc.querySelector('font-face');
+      const upm = parseFloat(ff?.getAttribute('units-per-em') || 1000);
+      const defAdv = parseFloat(fe?.getAttribute('horiz-adv-x') || upm / 2);
+      const glyphs = new Map();
+      doc.querySelectorAll('glyph').forEach(g => {
+        const u = g.getAttribute('unicode');
+        if (u == null || glyphs.has(u)) return;
+        glyphs.set(u, { d: g.getAttribute('d') || '', adv: parseFloat(g.getAttribute('horiz-adv-x') || defAdv) });
+      });
+      // 대문자 높이: H 글리프의 y 최댓값
+      let cap = 0.66;
+      const H = glyphs.get('H');
+      if (H && H.d) {
+        const nums = H.d.match(/-?\d*\.?\d+(?:e-?\d+)?/gi).map(Number);
+        let maxY = 0; for (let i = 1; i < nums.length; i += 2) maxY = Math.max(maxY, nums[i]);
+        if (maxY > 0) cap = maxY / upm;
+      }
+      font = { id, otf: false, glyphs, upm, defAdv, cap, has: ch => ch === ' ' || glyphs.has(ch) };
+    }
+    fontCache[id] = font;
+    return font;
+  }
+
+  // ---------- 글자 → 선(path) ----------
+  // capMm: 대문자 높이(mm). 반환: { width, items:[{font, ch, adv(mm)}] }
+  function shape(text, font, koFont, capMm, track) {
+    const items = [];
+    let width = 0;
+    const chars = Array.from(text);
+    chars.forEach((ch, i) => {
+      let f = font.has(ch) ? font : (koFont && koFont.has(ch) ? koFont : font);
+      // 대문자 높이를 기준으로 글자 크기 맞춤. 한글로 대신 그릴 땐 숫자·영문과 높이가 비슷해지도록 조금 줄임
+      const em = f === font ? capMm / font.cap : capMm / f.cap * 0.88;
+      let adv;
+      if (f.otf) adv = f.ot.charToGlyph(ch).advanceWidth / f.upm * em;
+      else adv = ((f.glyphs.get(ch) || {}).adv ?? (ch === ' ' ? f.defAdv : f.defAdv)) / f.upm * em;
+      if (ch === ' ' && !f.otf && !f.glyphs.has(' ')) adv = 0.32 * em;
+      items.push({ f, ch, adv, em });
+      width += adv + (i < chars.length - 1 ? track : 0);
+    });
+    return { width, items };
+  }
+
+  // 굵게: 같은 글자를 0.3mm씩 비켜서 여러 번 그어 두껍게 만듦 (펜 플로터용)
+  function boldOffsets(level) {
+    const pts = [[0, 0]], step = 0.3;
+    for (let ring = 1; ring < level; ring++) {
+      const n = 6 * ring;
+      for (let i = 0; i < n; i++) { const a = 2 * Math.PI * i / n; pts.push([ring * step * Math.cos(a), ring * step * Math.sin(a)]); }
+    }
+    return pts;
+  }
+  // 글자가 실제로 그려지는 범위(잉크 영역) 계산 — 글자 폭(여백 포함)이 아닌 선 기준
+  function inkBox(shaped, x, baseline, track) {
+    let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity, cx = x;
+    shaped.items.forEach(it => {
+      if (it.ch !== ' ') {
+        if (it.f.otf) {
+          const b = it.f.ot.getPath(it.ch, cx, baseline, it.em).getBoundingBox();
+          if (isFinite(b.x1)) { x1 = Math.min(x1, b.x1); x2 = Math.max(x2, b.x2); y1 = Math.min(y1, b.y1); y2 = Math.max(y2, b.y2); }
+        } else {
+          const g = it.f.glyphs.get(it.ch);
+          if (g && g.d) {
+            const k = it.em / it.f.upm;
+            const nums = g.d.match(/-?\d*\.?\d+(?:e-?\d+)?/gi).map(Number);
+            for (let i = 0; i + 1 < nums.length; i += 2) {
+              const px = cx + nums[i] * k, py = baseline - nums[i + 1] * k;
+              x1 = Math.min(x1, px); x2 = Math.max(x2, px); y1 = Math.min(y1, py); y2 = Math.max(y2, py);
+            }
+          }
+        }
+      }
+      cx += it.adv + track;
+    });
+    return isFinite(x1) ? { x1, y1, x2, y2 } : { x1: x, y1: baseline, x2: x, y2: baseline };
+  }
+  // (cx, cy) 지점에 잉크 영역 중심이 오도록 그리기
+  function drawCentered(shaped, cx, cy, track) {
+    const b = inkBox(shaped, 0, 0, track);
+    return draw(shaped, cx - (b.x1 + b.x2) / 2, cy - (b.y1 + b.y2) / 2, track);
+  }
+
+  function draw(shaped, x, baseline, track, bold = 1) {
+    const offs = boldOffsets(bold);
+    const out = [];
+    let cx = x;
+    shaped.items.forEach(it => {
+      if (it.ch !== ' ') {
+        if (it.f.otf) {
+          const d = it.f.ot.getPath(it.ch, cx, baseline, it.em).toPathData(3);
+          if (d) out.push(`<path d="${d}"/>`);
+        } else {
+          const g = it.f.glyphs.get(it.ch);
+          if (g && g.d) {
+            const k = it.em / it.f.upm;
+            offs.forEach(([ox, oy]) =>
+              out.push(`<path d="${g.d}" transform="translate(${r(cx + ox)} ${r(baseline + oy)}) scale(${r6(k)} ${r6(-k)})" stroke-width="${r(STROKE / k)}"/>`));
+          }
+        }
+      }
+      cx += it.adv + track;
+    });
+    return out;
+  }
+  const r = n => Math.round(n * 1000) / 1000;
+  const r6 = n => Math.round(n * 1e6) / 1e6;
+
+  // ---------- 날짜 ----------
+  function dateParts() {
+    const y = parseInt($('y').value, 10), m = parseInt($('m').value, 10), d = parseInt($('d').value, 10);
+    const valid = y >= 1 && m >= 1 && m <= 12 && d >= 1 && d <= new Date(y, m, 0).getDate();
+    return { y, m, d, valid, month: valid ? MONTHS[m - 1] : '', day: valid ? String(d) : '' };
+  }
+  function keyword() {
+    let k = ($('kw').value || '').normalize('NFC').trim();
+    if ($('upper').checked) k = k.toUpperCase();
+    return k;
+  }
+
+  // ---------- 시안 만들기 (고정 레이아웃) ----------
+  //   MAY        ← 월 (작게)
+  //  ──────      ← 구분선
+  //    10        ← 날짜 (크게, 굵게)
+  //   BIRTH      ← 키워드 (작게, 선택)
+  async function build() {
+    const paper = A4;
+    const bx = +$('bx').value, by = +$('by').value, bw = +$('bw').value, bh = +$('bh').value;
+    const INNER = Math.max(0, +$('pad').value || 0);   // 안쪽 여백(mm, 사방)
+    const font = await loadFont($('font').value);
+    const dFont = await loadFont($('dFont').value);
+    const mFont = await loadFont($('mFont').value);
+    const kw = keyword();
+    const dt = dateParts();
+    const needsKo = /[^\x00-\x7F]/.test(kw);
+    const koFont = needsKo ? await loadFont(KO_FONT) : null;
+
+    const mCap = +$('mSize').value, nCap = +$('nSize').value, kCap = +$('kSize').value, cScale = +$('cSize').value;
+    const showYear = $('showYear').checked, showDow = $('showDow').checked, monStart = $('monStart').checked;
+    const maxW = bw - INNER * 2, maxH = bh - INNER * 2;
+    const paths = [];
+    if ($('drawBox').checked) paths.push(`<rect x="${r(bx)}" y="${r(by)}" width="${r(bw)}" height="${r(bh)}"/>`);
+    let overflow = false;
+
+    if (dt.valid) {
+      // 달력 계산
+      const first = new Date(dt.y, dt.m - 1, 1).getDay();          // 0=일
+      const offset = monStart ? (first + 6) % 7 : first;
+      const days = new Date(dt.y, dt.m, 0).getDate();
+      const rows = Math.ceil((offset + days) / 7);
+      const cellW = maxW / 7;
+      // 두 자리 숫자가 칸 폭의 75%를 넘지 않도록 숫자 높이 자동 축소
+      let nCapU = nCap;
+      const w28 = shape('28', dFont, null, nCap, nCap * 0.03).width;
+      if (w28 > cellW * 0.75) nCapU = nCap * cellW * 0.75 / w28;
+
+      // 제목
+      const title = showYear ? `${dt.month} ${dt.y}` : dt.month;
+      let tSh = shape(title, mFont, koFont, mCap, mCap * 0.3);
+      let tCap = mCap;
+      if (tSh.width > maxW) { tCap = mCap * maxW / tSh.width; tSh = shape(title, mFont, koFont, tCap, tCap * 0.3); }
+      const wCap = nCapU * 0.85;
+      let kSh = kw ? shape(kw, font, koFont, kCap, kCap * 0.25) : null;
+      let kCapU = kCap;
+      if (kSh && kSh.width > maxW) { kCapU = kCap * maxW / kSh.width; kSh = shape(kw, font, koFont, kCapU, kCapU * 0.25); }
+
+      // 세로 배치: 제목 / 선 / 요일 / 날짜칸 / 키워드
+      const lineW = +$('lineW').value;
+      const lineN = Math.max(1, Math.round((lineW - STROKE) / 0.25) + 1);   // 펜(0.35mm)으로 몇 줄 겹쳐 그을지
+      const lineSpan = lineN > 1 ? lineW - STROKE : 0;                      // 첫 줄~마지막 줄 간격
+      const fixedH = tCap + 1.6 + lineSpan + (showDow ? 1.8 + wCap + 0.6 : 0.6) + (kSh ? 2.4 + kCapU : 0);
+      let rowH = Math.min((maxH - fixedH) / rows, cellW * 0.95);
+      if (rowH < nCapU * 1.5) overflow = true;
+      rowH = Math.max(rowH, nCapU * 1.2);
+      const totalH = fixedH + rowH * rows;
+      const cx = bx + bw / 2;
+      let y = by + (bh - totalH) / 2;
+      const gx = bx + INNER;                                         // 날짜칸 왼쪽
+
+      y += tCap;
+      paths.push(...draw(tSh, cx - tSh.width / 2, y, tCap * 0.3));
+      y += 1.6;
+      // 구분선: 굵기만큼 펜으로 여러 줄을 촘촘히 그어 두껍게 (지그재그로 이어서 펜을 들지 않음)
+      if (lineN === 1) paths.push(`<line x1="${r(gx)}" y1="${r(y)}" x2="${r(gx + maxW)}" y2="${r(y)}"/>`);
+      else {
+        let d = '';
+        for (let i = 0; i < lineN; i++) {
+          const ly = y + lineSpan * i / (lineN - 1);
+          const [xa, xb] = i % 2 ? [gx + maxW, gx] : [gx, gx + maxW];
+          d += (i ? ` L ${r(xa)} ${r(ly)}` : `M ${r(xa)} ${r(ly)}`) + ` L ${r(xb)} ${r(ly)}`;
+        }
+        paths.push(`<path d="${d}"/>`);
+      }
+      y += lineSpan;
+
+      if (showDow) {
+        y += 1.8 + wCap;
+        const dows = monStart ? ['M','T','W','T','F','S','S'] : ['S','M','T','W','T','F','S'];
+        dows.forEach((t, i) => {
+          const sh = shape(t, dFont, null, wCap, 0);
+          paths.push(...drawCentered(sh, gx + cellW * (i + 0.5), y - wCap / 2, 0));
+        });
+      }
+      y += 0.6;
+
+      // 날짜 숫자 + 동그라미
+      for (let d = 1; d <= days; d++) {
+        const idx = offset + d - 1, col = idx % 7, row = Math.floor(idx / 7);
+        const ccx = gx + cellW * (col + 0.5);
+        const ccy = y + rowH * (row + 0.5);
+        const sh = shape(String(d), dFont, null, nCapU, nCapU * 0.03);
+        paths.push(...drawCentered(sh, ccx, ccy, nCapU * 0.03));
+        if (d === dt.d) {
+          const rad = Math.min(cellW, rowH) * 0.5 * cScale;
+          paths.push(`<circle cx="${r(ccx)}" cy="${r(ccy)}" r="${r(rad)}"/>`);
+          if ($('dblCircle').checked) paths.push(`<circle cx="${r(ccx)}" cy="${r(ccy)}" r="${r(rad + 0.3)}"/>`);
+        }
+      }
+      y += rowH * rows;
+
+      if (kSh) {
+        y += 2.4 + kCapU;
+        paths.push(...draw(kSh, cx - kSh.width / 2, y, kCapU * 0.25));
+      }
+      if (totalH > maxH + 0.01) overflow = true;
+    }
+    const shrunk = false;
+    const outOfPaper = bx < 0 || by < 0 || bx + bw > paper.w || by + bh > paper.h;
+
+    const svg =
+`<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="${paper.w}mm" height="${paper.h}mm" viewBox="0 0 ${paper.w} ${paper.h}">
+<g inkscape:groupmode="layer" inkscape:label="draft" fill="none" stroke="#000000" stroke-width="${STROKE}" stroke-linecap="round" stroke-linejoin="round">
+${paths.join('\n')}
+</g>
+</svg>
+`;
+
+    // 미리보기: 안내선(저장 안 됨) 추가 후 박스 확대 화면 + A4 썸네일
+    const body = svg.replace(/^<\?xml[^>]*>\s*/, '');
+    const guideOn = $('guide').checked;
+    const fs = Math.max(1.1, Math.min(bw, bh) * 0.035);   // 라벨 글자 크기(mm)
+    const mono = 'font-family="SF Mono, Menlo, monospace"';
+    const guides = guideOn ? `<g fill="none" stroke="#1960a3" stroke-width="0.15" stroke-dasharray="1 0.8"><rect x="${r(bx)}" y="${r(by)}" width="${r(bw)}" height="${r(bh)}"/></g>`
+      + `<g fill="none" stroke="#c9601f" stroke-width="0.15" stroke-dasharray="0.6 0.6"><rect x="${r(bx + INNER)}" y="${r(by + INNER)}" width="${r(Math.max(0, bw - INNER * 2))}" height="${r(Math.max(0, bh - INNER * 2))}"/></g>`
+      + `<g ${mono} font-size="${r(fs)}" stroke="none">`
+      +   `<text x="${r(bx)}" y="${r(by - fs * 0.5)}" fill="#1960a3">${(+bw).toFixed(1)} mm</text>`
+      +   `<text transform="translate(${r(bx + bw + fs * 0.6)} ${r(by + bh / 2)}) rotate(90)" text-anchor="middle" fill="#1960a3">${(+bh).toFixed(1)} mm</text>`
+      +   (INNER > fs * 1.3 ? `<text x="${r(bx + bw - INNER)}" y="${r(by + INNER - fs * 0.45)}" text-anchor="end" fill="#6b2b00">Margin ${INNER}mm</text>` : '')
+      + `</g>` : '';
+    const withGuide = body.replace('</svg>', guides + '</svg>');
+    const zm = 6; // 박스 주변 여유(mm)
+    const zoomSvg = withGuide
+      .replace(/width="[^"]+mm" height="[^"]+mm" viewBox="[^"]+"/, `viewBox="${r(bx - zm)} ${r(by - zm)} ${r(bw + zm * 2)} ${r(bh + zm * 2)}"`);
+    const box = $('paperBox'), wrap = $('paperWrap');
+    const stage = wrap.parentElement.getBoundingClientRect();
+    const vw = bw + zm * 2, vh = bh + zm * 2;
+    const scale = Math.min((stage.width - 64 - 200) / vw, (stage.height - 64) / vh);
+    wrap.style.width = vw * scale + 'px';
+    wrap.style.height = vh * scale + 'px';
+    $('scaleInfo').textContent = `1mm = ${scale.toFixed(2)}px`;
+    $('wmCoords').textContent = `COORDS: X:${(+bx).toFixed(2)} Y:${(+by).toFixed(2)}`;
+    $('thumbX').textContent = `X: ${(+bx).toFixed(1)}mm`; $('thumbY').textContent = `Y: ${(+by).toFixed(1)}mm`;
+    $('lgBox').textContent = `외곽 ${bw}×${bh}mm`; $('lgPad').textContent = `안전 여백 ${INNER}mm`;
+    box.innerHTML = zoomSvg;
+    $('thumbBox').innerHTML = withGuide.replace(/width="[^"]+mm" height="[^"]+mm"/, '')
+      .replace('</svg>', `<rect x="0" y="0" width="${paper.w}" height="${paper.h}" fill="none" stroke="#999" stroke-width="0.8"/><rect x="${r(bx)}" y="${r(by)}" width="${r(bw)}" height="${r(bh)}" fill="rgba(59,130,196,.15)" stroke="#3b82c4" stroke-width="0.8"/></svg>`);
+
+    $('dims').innerHTML = `A4 · 박스 ${bw}×${bh}mm @ X${bx} Y${by}` + (dt.valid ? ` <span class="sep">|</span> ${dt.y}년 ${dt.m}월 달력 (${dt.d}일 표시)` : '') + (kw ? ` <span class="sep">|</span> 키워드 ${kw}` : '');
+    const warns = [];
+    if (!dt.valid) warns.push('날짜를 확인해 주세요');
+    if (overflow) warns.push('박스가 좁습니다. 월·숫자·키워드 높이를 줄여 주세요');
+    if (outOfPaper) warns.push('박스가 A4 밖으로 나갑니다');
+    
+    $('warn').innerHTML = warns.length ? `<span class="warn">⚠ ${warns.join(' · ')}</span>` : '<span class="ready"><span class="dot ok"></span>준비 완료</span>';
+    $('fontNote').textContent = (needsKo && !font.otf) ? '한글 키워드는 본고딕으로 대신 그립니다 (테두리 선 방식).' :
+      (font.otf ? '글자 테두리를 따라 그립니다.' : '');
+    $('save').disabled = !dt.valid;
+
+    const p2 = n => String(n).padStart(2, '0');
+    const name = `${dt.y}${p2(dt.m)}${p2(dt.d)}${kw ? '_' + kw.replace(/\s+/g, '') : ''}`;
+    return { svg, name, valid: dt.valid };
+  }
+
+  // ---------- 저장 ----------
+  // 이 PC에서 calendar-plotter.command로 켰을 때만 서버 기능(출력·drafts 저장) 사용. 웹(GitHub)에서는 미리보기 + SVG 다운로드만.
+  const isLocal = ['localhost', '127.0.0.1'].includes(location.hostname);
+  const hasServer = location.protocol.startsWith('http') && isLocal;
+  const isWeb = location.protocol.startsWith('http') && !isLocal;
+  async function save() {
+    const { svg, name, valid } = await build();
+    if (!valid) return;
+    const msg = $('msg');
+    if (!hasServer) { // 서버 없이 파일로 열었을 때: 다운로드로 저장
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+      a.download = name + '.svg'; a.click();
+      msg.className = 'msg'; msg.textContent = `다운로드 폴더에 ${name}.svg 로 저장했습니다.`;
+      return;
+    }
+    try {
+      const res = await fetch('/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, svg }) });
+      const j = await res.json();
+      if (!j.ok) throw new Error(j.error);
+      state.lastFile = j.file;
+      msg.className = 'msg'; msg.textContent = `drafts 폴더에 ${j.file} 로 저장했습니다.`;
+      $('after').classList.add('show');
+    } catch (e) {
+      msg.className = 'msg warn'; msg.textContent = '저장하지 못했습니다: ' + e.message;
+    }
+  }
+  // ---------- 플로터 출력 ----------
+  let confirmTimer = null, polling = null;
+  async function plot() {
+    const btn = $('plot');
+    if (!hasServer) { setPlot('err', isWeb ? '웹 미리보기에서는 출력할 수 없어요.' : '서버로 실행해야 출력할 수 있습니다 (calendar-plotter.command).'); return; }
+    if (!btn.classList.contains('confirm')) {          // 1단계: 한 번 더 눌러 확인
+      btn.classList.add('confirm'); $('plotLabel').textContent = '종이·펜 준비됐나요? 한 번 더 누르면 시작';
+      clearTimeout(confirmTimer);
+      confirmTimer = setTimeout(resetPlotBtn, 4000);
+      return;
+    }
+    resetPlotBtn();
+    const { svg, name, valid } = await build();
+    if (!valid) return;
+    try {
+      const meta = { y: $('y').value, m: $('m').value, d: $('d').value, kw: keyword(), no: scan.cur ? scan.cur.no : '' };   // 출력 기록용
+      const res = await fetch('/plot', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, svg, meta }) });
+      const j = await res.json();
+      if (!j.ok) throw new Error(j.error);
+      state.lastFile = j.file;
+      setPlot('run', `그리는 중… (${j.file})`);
+      btn.disabled = true; $('stop').style.display = 'block';
+      watchStatus();
+    } catch (e) { setPlot('err', '출력하지 못했습니다: ' + e.message); }
+  }
+  function resetPlotBtn() { $('plot').classList.remove('confirm'); $('plotLabel').textContent = '플로터로 그리기'; }
+  const STATE = { run: ['busy', 'PLOTTING'], ok: ['ok', 'DONE'], err: ['err', 'ERROR'], idle: ['', 'READY'] };
+  function setPlot(kind, text) {
+    $('plotStatus').className = 'state ' + kind;
+    $('stateText').textContent = text;
+    $('stateDot').className = 'dot ' + (STATE[kind] || STATE.idle)[0];
+    $('stateCode').textContent = (STATE[kind] || STATE.idle)[1];
+  }
+  function watchStatus() {
+    clearInterval(polling);
+    const t0 = Date.now();
+    polling = setInterval(async () => {
+      try {
+        const st = await (await fetch('/status')).json();
+        const sec = Math.round((Date.now() - t0) / 1000);
+        if (st.state === 'running') setPlot('run', `그리는 중… ${sec}초 (${st.file})`);
+        else {
+          clearInterval(polling); $('plot').disabled = false; $('stop').style.display = 'none';
+          if (st.state === 'done') { setPlot('ok', `출력 완료 (${st.file})`); $('after').classList.add('show'); scanPlotDone(); }
+          else setPlot('err', (st.message && st.message.startsWith('중지') ? '' : '출력 실패\n') + (st.message || '') + '\n→ "Inkscape에서 열기"로 수동 출력할 수 있습니다.');
+          if (st.state !== 'done') $('after').classList.add('show');
+        }
+      } catch (e) { /* 일시적 오류 무시 */ }
+    }, 1000);
+  }
+  // 페이지를 다시 열었을 때 출력 중이면 이어서 표시
+  if (hasServer) fetch('/status').then(r => r.json()).then(st => { if (st.state === 'running') { $('plot').disabled = true; $('stop').style.display = 'block'; watchStatus(); } }).catch(() => {});
+
+  async function post(path, body) {
+    try { await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) }); } catch (e) {}
+  }
+
+  // ---------- 화면 구성 ----------
+  function seg(elId, items, key) {
+    const el = $(elId);
+    items.forEach(it => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.textContent = it.label; b.dataset.id = it.id;
+      b.setAttribute('aria-pressed', state[key] === it.id);
+      b.onclick = () => {
+        state[key] = it.id;
+        el.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x.dataset.id === it.id));
+        refresh();
+      };
+      el.appendChild(b);
+    });
+  }
+  FONTS.forEach(f => { ['font', 'dFont', 'mFont'].forEach(sel => { const o = document.createElement('option'); o.value = f.id; o.textContent = f.label; $(sel).appendChild(o); }); });
+  $('mFont').value = 'HersheySansMed';   // 월: 산세리프 굵게
+  $('dFont').value = 'HersheySans1';     // 요일·날짜: 산세리프
+  $('font').value = 'HersheySans1';      // 키워드: 산세리프
+
+  const now = new Date();
+  $('y').value = now.getFullYear(); $('m').value = now.getMonth() + 1; $('d').value = now.getDate();
+
+  // 3~6번 설정은 이 브라우저에 기억 → 다음에 켜도 같은 값
+  const SETTING_IDS = ['bx', 'by', 'bw', 'bh', 'pad', 'mFont', 'dFont', 'font', 'lineW', 'mSize', 'nSize', 'cSize', 'kSize',
+                       'showYear', 'showDow', 'monStart', 'dblCircle', 'drawBox', 'guide', 'upper'];
+  const STORE_KEY = 'calendar-plot-settings-v1';
+  const defaults = {};
+  SETTING_IDS.forEach(id => { const el = $(id); defaults[id] = el.type === 'checkbox' ? el.checked : el.value; });
+  function applySettings(obj) {
+    SETTING_IDS.forEach(id => { if (obj[id] === undefined) return; const el = $(id); if (el.type === 'checkbox') el.checked = !!obj[id]; else el.value = obj[id]; });
+  }
+  function saveSettings() {
+    const o = { v2: true }; SETTING_IDS.forEach(id => { const el = $(id); o[id] = el.type === 'checkbox' ? el.checked : el.value; });
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(o)); } catch (e) {}
+  }
+  let hadSaved = false;
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
+    if (saved) {
+      hadSaved = true;
+      // 기본값 변경(2026-10-19): 대문자 변환 끔, 동그라미 두 번 긋기 켬 → 예전에 저장된 값에도 한 번 적용
+      if (!saved.v2) { delete saved.upper; delete saved.dblCircle; }
+      applySettings(saved);
+    }
+  } catch (e) {}
+  const fontLabel = id => (FONTS.find(f => f.id === id) || {}).label?.split(' · ')[0] || id;
+  function updateSummaries() {
+    $('sumPos').textContent = `X${$('bx').value} Y${$('by').value} · ${$('bw').value}×${$('bh').value}`;
+    $('sumPad').textContent = `여백 ${$('pad').value}mm`;
+    $('sumFont').textContent = `월 ${fontLabel($('mFont').value)} · 날짜 ${fontLabel($('dFont').value)} · 키워드 ${fontLabel($('font').value)}`;
+    $('sumSize').textContent = `월 ${$('mSize').value} · 선 ${$('lineW').value} · 숫자 ${$('nSize').value} · 키워드 ${$('kSize').value} · 동그라미 ${$('cSize').value}`;
+  }
+
+  const sliders = ['mSize', 'lineW', 'nSize', 'cSize', 'kSize'];
+  function syncOutputs() { sliders.forEach(id => $(id + 'O').textContent = $(id).value); }
+
+  let pending = null;
+  function refresh() {
+    syncOutputs(); updateSummaries(); saveSettings();
+    $('after').classList.remove('show'); $('msg').textContent = '';
+    cancelAnimationFrame(pending);
+    pending = requestAnimationFrame(() => build().catch(e => { $('warn').innerHTML = `<span class="warn">${e.message}</span>`; }));
+  }
+  ['y', 'm', 'd', 'kw', 'upper', 'font', 'dFont', 'mFont', 'bx', 'by', 'bw', 'bh', 'pad', 'drawBox', 'guide', 'showYear', 'showDow', 'monStart', 'dblCircle', ...sliders].forEach(id => $(id).addEventListener('input', refresh));
+  $('save').onclick = save;
+  $('resetSettings').onclick = () => { applySettings(defaults); refresh(); $('defaultsMsg').textContent = '기본값으로 되돌렸어요.'; };
+  // 기본값을 이 PC의 파일(calendar-plotter/user_defaults.json)에 저장 → 브라우저 기록을 지워도 유지
+  $('saveDefaults').onclick = async () => {
+    const o = {}; SETTING_IDS.forEach(id => { const el = $(id); o[id] = el.type === 'checkbox' ? el.checked : el.value; });
+    if (!hasServer) { $('defaultsMsg').textContent = isWeb ? '웹 미리보기에서는 기본값을 바꿀 수 없어요. (이 브라우저에는 지금 설정이 기억돼요)' : '서버로 실행해야 저장할 수 있어요.'; return; }
+    try {
+      const j = await (await fetch('/defaults', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(o) })).json();
+      if (!j.ok) throw new Error(j.error);
+      Object.assign(defaults, o); $('defaultsMsg').textContent = '기본값으로 저장했어요.';
+    } catch (e) { $('defaultsMsg').textContent = '저장하지 못했어요: ' + e.message; }
+  };
+  if (hasServer) fetch('/defaults').then(r => r.json()).then(j => {
+    if (!j.ok || !j.defaults) return;
+    Object.assign(defaults, j.defaults);
+    if (!hadSaved) { applySettings(defaults); refresh(); }        // 이 브라우저에 기억된 값이 없으면 저장된 기본값으로 시작
+  }).catch(() => {});
+  $('plot').onclick = plot;
+  $('stop').onclick = () => post('/stop');
+  $('openInk').onclick = () => { $('menu').classList.remove('show'); state.lastFile ? post('/open', { file: state.lastFile }) : ($('msg').textContent = '먼저 시안을 저장하거나 출력해 주세요.'); };
+  $('reveal').onclick = () => { $('menu').classList.remove('show'); post('/reveal'); };
+  $('more').onclick = e => { e.stopPropagation(); $('menu').classList.toggle('show'); };
+  document.addEventListener('click', e => { if (!$('menu').contains(e.target)) $('menu').classList.remove('show'); });
+
+  // ---------- 접수 QR (USB 스캐너) ----------
+  // 스캐너는 키보드처럼 글자를 아주 빠르게 입력하고 Enter로 끝냄.
+  // 한글 입력 상태여도 깨지지 않도록 '눌린 자판 위치'(e.code)로 글자를 읽음.
+  const scan = { cur: null, queue: [], printed: {} };
+  const B45 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:';
+  function b45decode(str) {
+    const out = [];
+    for (let i = 0; i < str.length; i += 3) {
+      const c = B45.indexOf(str[i]), d = B45.indexOf(str[i + 1]);
+      if (c < 0 || d < 0) throw new Error('bad');
+      if (i + 2 < str.length) {
+        const e = B45.indexOf(str[i + 2]); if (e < 0) throw new Error('bad');
+        const x = c + d * 45 + e * 2025; if (x > 65535) throw new Error('bad');
+        out.push(x >> 8, x & 255);
+      } else {
+        const x = c + d * 45; if (x > 255) throw new Error('bad');
+        out.push(x);
+      }
+    }
+    return new Uint8Array(out);
+  }
+  function parseQr(text) {
+    if (!text.startsWith('CP1:')) return null;
+    try {
+      const body = new TextDecoder('utf-8', { fatal: true }).decode(b45decode(text.slice(4)));
+      const [ds, kw, no] = body.split('\u001f');
+      if (!/^\d{8}$/.test(ds) || !no) return null;
+      return { y: +ds.slice(0, 4), m: +ds.slice(4, 6), d: +ds.slice(6, 8), kw: kw || '', no };
+    } catch (e) { return null; }
+  }
+  const SHIFT_DIGIT = { 4: '$', 5: '%', 8: '*' };
+  function codeToChar(e) {
+    const c = e.code || '';
+    if (/^Key[A-Z]$/.test(c)) return c[3];
+    if (/^Digit\d$/.test(c)) return e.shiftKey ? (SHIFT_DIGIT[c[5]] || null) : c[5];
+    if (/^Numpad\d$/.test(c)) return c[6];
+    return ({ Space: ' ', Minus: '-', Period: '.', Slash: '/', NumpadAdd: '+', NumpadSubtract: '-', NumpadMultiply: '*',
+              NumpadDivide: '/', NumpadDecimal: '.', Equal: e.shiftKey ? '+' : null, Semicolon: e.shiftKey ? ':' : null })[c] ?? null;
+  }
+  let sBuf = '', sLast = 0, sFast = false;
+  window.addEventListener('keydown', e => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const t = performance.now(), gap = t - sLast; sLast = t;
+    if (gap > 100) { sBuf = ''; sFast = false; }
+    if (e.code === 'Enter' || e.code === 'NumpadEnter' || e.code === 'Tab') {
+      if (sBuf.startsWith('CP1:')) { e.preventDefault(); e.stopPropagation(); onScan(sBuf); }
+      sBuf = ''; sFast = false; return;
+    }
+    if (/^(Shift|Caps)/.test(e.code)) return;
+    const ch = codeToChar(e);
+    if (ch === null) { sBuf = ''; sFast = false; return; }
+    sBuf += ch;
+    const prefixOk = 'CP1:'.startsWith(sBuf.slice(0, 4));
+    if (!prefixOk) sFast = false;
+    else if (!sFast && sBuf.length >= 2 && gap < 50) sFast = true;
+    if (sFast) { e.preventDefault(); e.stopPropagation(); }
+  }, true);
+
+  function flashScan(cls, hint) {
+    const c = $('scanCard'); c.classList.remove('flash', 'bad'); void c.offsetWidth; c.classList.add(cls);
+    $('scanHint').textContent = hint;
+    clearTimeout(flashScan.t); flashScan.t = setTimeout(() => { c.classList.remove(cls); $('scanHint').textContent = '스캐너 대기 중'; }, 2500);
+  }
+  function onScan(text) {
+    const a = document.activeElement; if (a && a.blur) a.blur();   // 한글 조합 중이던 글자 정리
+    setTimeout(() => {
+      const it = parseQr(text);
+      if (!it) { flashScan('bad', 'QR을 읽지 못했어요'); return; }
+      if ((scan.cur && !scan.cur.done && scan.cur.no === it.no) || scan.queue.some(q => q.no === it.no)) { flashScan('bad', `이미 불러온 번호 ${it.no}`); return; }
+      it.at = new Date();
+      const busy = $('plot').disabled;
+      if (!busy && (!scan.cur || scan.cur.done)) { loadScan(it); flashScan('flash', `${it.no} 불러옴`); }
+      else { scan.queue.push(it); renderScan(); flashScan('flash', `${it.no} 대기열에 추가`); }
+    }, 30);
+  }
+  function loadScan(it) {
+    scan.cur = it;
+    $('y').value = it.y; $('m').value = it.m; $('d').value = it.d; $('kw').value = it.kw;
+    renderScan(); refresh();
+  }
+  function scanPlotDone() {
+    if (scan.cur && !scan.cur.done) { scan.cur.done = true; scan.printed[scan.cur.no] = new Date().toLocaleString('sv').slice(0, 16); }
+    if (scan.queue.length) loadScan(scan.queue.shift()); else renderScan();
+  }
+  const two = n => String(n).padStart(2, '0');
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  function renderScan() {
+    const cur = scan.cur;
+    if (!cur) {
+      $('scanCur').innerHTML = '<div class="scan-empty">참여자 QR을 스캐너로 찍으면 날짜·키워드가 자동으로 들어가요.<br>QR 없이 오신 분은 아래에 직접 입력하세요.</div>';
+    } else {
+      const was = scan.printed[cur.no];
+      $('scanCur').innerHTML = `<div class="scan-cur"><div><div class="scan-no">${esc(cur.no)}</div>
+        <div class="scan-sub">${cur.done ? '<b>출력 완료</b>' : '불러옴 ' + two(cur.at.getHours()) + ':' + two(cur.at.getMinutes())}</div></div>
+        <button type="button" class="scan-btn" id="scanClear">현장 입력으로</button></div>
+        ${was && !cur.done ? `<div class="scan-warn">이미 출력한 번호예요 (${esc(was)})</div>` : ''}`;
+      $('scanClear').onclick = () => { if (!scan.cur.done) scan.queue.unshift(scan.cur); scan.cur = null; renderScan(); };   // 안 그린 번호는 대기열로
+    }
+    const q = $('scanQ'); q.hidden = !scan.queue.length;
+    q.innerHTML = scan.queue.length ? `<div class="scan-q-head">대기 ${scan.queue.length}명</div>` + scan.queue.map((it, i) =>
+      `<div class="scan-row"><div>${esc(it.no)}<div class="meta">${it.y}.${two(it.m)}.${two(it.d)} · ${esc(it.kw || '키워드 없음')}${scan.printed[it.no] ? ' · 출력한 번호' : ''}</div></div>
+       <button type="button" class="scan-btn" data-load="${i}">불러오기</button><button type="button" class="x" data-del="${i}" aria-label="삭제">✕</button></div>`).join('') : '';
+    q.querySelectorAll('[data-load]').forEach(b => b.onclick = () => {
+      if ($('plot').disabled) { flashScan('bad', '그리는 중에는 바꿀 수 없어요'); return; }
+      const [it] = scan.queue.splice(+b.dataset.load, 1);
+      if (scan.cur && !scan.cur.done) scan.queue.unshift(scan.cur);   // 아직 안 그린 번호는 대기열로 되돌림
+      loadScan(it);
+    });
+    q.querySelectorAll('[data-del]').forEach(b => b.onclick = () => { scan.queue.splice(+b.dataset.del, 1); renderScan(); });
+  }
+  renderScan();
+  if (hasServer) fetch('/printed').then(r => r.json()).then(j => { Object.assign(scan.printed, j.printed || {}); renderScan(); }).catch(() => {});
+
+  async function checkDevice() {
+    if (!hasServer) { $('devDot').className = 'dot err'; $('devText').textContent = isWeb ? '웹 미리보기 · 플로터 연결 없음 (SVG 저장만 가능)' : '서버 없이 열림 — calendar-plotter.command로 실행'; return; }
+    try {
+      const d = await (await fetch('/device')).json();
+      $('devDot').className = 'dot ' + (d.connected ? 'ok' : 'err');
+      $('devText').textContent = d.connected ? `iDraw 플로터 연결됨 (${d.port.replace('/dev/', '')})` : '플로터가 연결되지 않았습니다 (USB 확인)';
+    } catch (e) { $('devDot').className = 'dot'; $('devText').textContent = '연결 상태를 확인할 수 없습니다'; }
+  }
+  checkDevice(); setInterval(checkDevice, 3000);
+  if (!hasServer) setPlot('err', isWeb ? '웹 미리보기에서는 출력할 수 없어요. 시안은 SVG로 저장할 수 있어요.' : '서버로 실행해야 출력할 수 있습니다');
+  if (isWeb) { $('plot').disabled = true; $('plotLabel').textContent = '출력은 부스 PC에서만 가능'; }
+  window.addEventListener('resize', refresh);
+  document.addEventListener('keydown', e => { if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); save(); } });
+  refresh();
+})();
+</script>
+</body>
+</html>
