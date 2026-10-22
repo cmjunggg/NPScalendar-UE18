@@ -1,0 +1,22 @@
+{
+  "bx": "75",
+  "by": "130",
+  "bw": "37",
+  "bh": "48",
+  "pad": "4",
+  "mFont": "HersheySansMed",
+  "dFont": "HersheySans1",
+  "font": "HersheySans1",
+  "lineW": "0.35",
+  "mSize": "4",
+  "nSize": "2",
+  "cSize": "1",
+  "kSize": "2",
+  "showYear": true,
+  "showDow": true,
+  "monStart": false,
+  "dblCircle": true,
+  "drawBox": false,
+  "guide": true,
+  "upper": false
+}
